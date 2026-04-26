@@ -3,6 +3,9 @@ Escriba el codigo que ejecute la accion solicitada.
 """
 
 # pylint: disable=import-outside-toplevel
+import zipfile
+import pandas as pd
+import os
 
 
 def clean_campaign_data():
@@ -49,8 +52,55 @@ def clean_campaign_data():
 
 
     """
+    def csv(df,output_path, name):
+        df.to_csv(output_path + '/'+name+'.csv',index=False)
 
-    return
+    input_path = "files/input"
+    output_path = "files/output"
+    dfs = []
+    for zip_folder in os.listdir(input_path):
+        zip_folder_path = os.path.join(input_path,zip_folder)
+        with zipfile.ZipFile(zip_folder_path,'r') as z:
+            files = z.namelist()
+            for file in files:
+                if not file.endswith('.csv'):
+                    continue
+                with z.open(file) as f:
+                    df = pd.read_csv(f)
+                    dfs.append(df)
+    
+    df = pd.concat(dfs, ignore_index=True)
+
+    # client
+    client = df.copy()[['client_id','age','job','marital','education','credit_default','mortgage']]
+
+    client['job'] = client['job'].str.replace('.','').str.replace('-','_')
+    client['education'] = client['education'].str.replace('.','_')
+    client['education'] = client['education'].replace('unknown',pd.NA)
+    client['credit_default'] = (client['credit_default'] == 'yes').astype(int)
+    client['mortgage'] = (client['mortgage'] == 'yes').astype(int)
+
+    csv(df=client,output_path=output_path,name='client')
+
+    # campaign
+    campaign =  df.copy()[['client_id','number_contacts','contact_duration','previous_campaign_contacts','previous_outcome','campaign_outcome','day','month']]
+
+    campaign['previous_outcome'] = (campaign['previous_outcome'] == 'success').astype(int)
+    campaign['campaign_outcome'] = (campaign['campaign_outcome'] == 'yes').astype(int)
+    campaign['month'] = campaign['month'].str.capitalize()
+    campaign['month'] = pd.to_datetime(campaign['month'], format='%b').dt.month.astype(str).str.zfill(2)
+    campaign['day'] = campaign['day'].astype(str).str.zfill(2)
+    campaign['last_contact_date'] = '2022-' + campaign['month'].astype(str) + '-' + campaign['day'].astype(str)
+    campaign = campaign.drop(columns=['day','month'])
+
+    csv(df=campaign,output_path=output_path,name='campaign')
+
+    # economics
+    economics = df.copy()[['client_id','cons_price_idx','euribor_three_months']]
+    csv(df=economics,output_path=output_path,name='economics')
+
+
+    return 
 
 
 if __name__ == "__main__":
